@@ -15,6 +15,47 @@ def main():
 
 
 
+def x_rotation_matrix(theta):
+	return np.array([[1., 0.,           0.], \
+	                 [0., cos(theta), -(sin(theta))], \
+	                 [0., sin(theta),   cos(theta)]])
+
+
+
+def y_rotation_matrix(theta):
+	return np.array([[  cos(theta),  0., sin(theta)], \
+	                 [  0.,          1., 0.], \
+	                 [-(sin(theta)), 0., cos(theta)]])
+
+
+
+def z_rotation_matrix(theta):
+	return np.array([[cos(theta), -(sin(theta)), 0.], \
+	                 [sin(theta),   cos(theta),  0.], \
+	                 [0.,           0.,          1.]])
+
+
+
+def sin(theta):
+	return np.sin(theta)
+
+
+
+def cos(theta):
+	return np.cos(theta)
+
+
+
+def tan(theta):
+	return np.tan(theta)
+
+
+
+def atan(x1, x2):
+	return np.arctan2(x1, x2)
+
+
+
 def add_white_to_colormap(orig_map, num):
 	from matplotlib import cm
 	temp_cmap = cm.get_cmap(orig_map, num)
