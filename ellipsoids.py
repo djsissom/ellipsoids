@@ -27,21 +27,28 @@ def main():
 	Requires bgc2.py as a dependency.
 	'''
 
-#	read in bgc2 files and make arrays of halo and particle data
+	opts, args = get_args(sys.argv[1:])
+	output_file, bgc2_files, ascii_files = parse_args(opts, args)
 
-#	read in halo ID and shape data from Rockstar output
+	for (ascii_file, bgc2_file) in zip(ascii_files, bgc2_files):
+		# read in halo ID and shape data from Rockstar output
+		ascii_header, ascii_data = read_files(ascii_file, header_line=0)
+		# read in bgc2 files and make arrays of halo and particle data
+		bgc2_header, halos, particles = read_bgc2_files(bgc2_file)
 
-#	find matching halo IDs from bgc2 data and Rockstar text output
 
-#	rotate general ellipsoid to fit halo shape
+		# find matching halo IDs from bgc2 data and Rockstar text output
 
-#	find (n/2)th particle and half-mass radius
+		# rotate general ellipsoid to fit halo shape
 
-#	save results to file
+		# find (n/2)th particle and half-mass radius
 
-#	make plots
+	# save results to file
 
-	pass
+	# make plots
+
+	print 'Finished.'
+	return
 
 
 
