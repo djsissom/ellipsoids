@@ -31,21 +31,53 @@ def main():
 	output_file, bgc2_files, ascii_files = parse_args(opts, args)
 
 	for (ascii_file, bgc2_file) in zip(ascii_files, bgc2_files):
-		# read in halo ID and shape data from Rockstar output
+		#  read in halo ID, shape data, etc. from Rockstar output
 		ascii_header, ascii_data = read_files(ascii_file, header_line=0)
-		# read in bgc2 files and make arrays of halo and particle data
-		bgc2_header, halos, particles = read_bgc2_files(bgc2_file)
+		#  read in bgc2 files and make arrays of halo and particle data
+		bgc2_header, halos, particles = bgc2.read_bgc2_numpy(bgc2_file)
+
+		#  find array to sort halos by number of particles to work from the biggest down
+		halo_indicies = np.argsort(halos.npart)
+		halo_indices = halo_indices[::-1]
+
+		#  loop through halos to work on one halo and particle list at a time
+		for iteration, halo_index in enumerate(halo_indices):
+			#  exit loop if max iteration reached
+			if (max_iteration > 0) and (iteration >= max_iteration):
+				break
+
+			#  get data for current halo
+			halo = halos[halo_index]
+			halo_particles = particles[halo_index]
+			ascii_halo = ascii_data[ascii_data.id == halo.id]
+
+			#  check for id match and duplicate halos
+			if len(ascii_halo) != 1:
+				print "Error:  found %d matches for halo ID %d." % (len(ascii_halo), ascii_halo.id[0])
+				continue
+
+			#  skip halos with fewer than specified number of particles
+			if (npart_threshold > 0) and (halos.npart < npart_threshold):
+				print "Skipping halos with fewer than %d particles." % npart_threshold
+				break
+
+			#  convert Mpc to kpc for halo and particle positions
+			for pos in halo.x, halo.y, halo.z, halo_particles.x, halo_particles.y, halo_particles.z:
+				pos[...] = pos * dist_scale
+
+			#  make particle positions relative to halo center
+			for particle_pos, halo_pos in zip([halo_particles.x, halo_particles.y, halo_particles.z], [halo.x, halo.y, halo.z]):
+				particle_pos[...] = particle_pos - halo_pos
 
 
-		# find matching halo IDs from bgc2 data and Rockstar text output
 
-		# rotate general ellipsoid to fit halo shape
+		#  rotate general ellipsoid to fit halo shape
 
-		# find (n/2)th particle and half-mass radius
+		#  find (n/2)th particle and half-mass radius
 
-	# save results to file
+	#  save results to file
 
-	# make plots
+	#  make plots
 
 	print 'Finished.'
 	return
@@ -161,6 +193,12 @@ if plot_dest_type == 'paper':
 	mpl.rcParams['ytick.minor.width'] = 2
 	mpl.rcParams['xtick.minor.size'] = 4
 	mpl.rcParams['ytick.minor.size'] = 4
+
+
+
+max_iteration					# maximum number of halos to work on
+npart_threshold = 100			# minimum number of particles per halo
+dist_scale = 1.e3				# convert Mpc to kpc
 
 
 
