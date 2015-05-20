@@ -11,6 +11,36 @@ from ipdb import set_trace
 
 
 def main():
+	'''
+	ellipsoids.py
+	
+	This program reads in halo and particle data from bgc2 files and halo shape
+	data from the Rockstar's output.  Halo shape information generated from
+	Rockstar is used to fit halos with appropriately-rotated ellipsoidal
+	shells, and the half-mass radius is found from the ellipsoidal radius of
+	the (n/2)th particle.
+
+	The halo IDs and resulting half-mass radii are saved to disk to be added as
+	an additional column in the master halo database.  Optionally, plots are
+	generated to demonstrate the ellipsoid halo fitting.
+
+	Requires bgc2.py as a dependency.
+	'''
+
+#	read in bgc2 files and make arrays of halo and particle data
+
+#	read in halo ID and shape data from Rockstar output
+
+#	find matching halo IDs from bgc2 data and Rockstar text output
+
+#	rotate general ellipsoid to fit halo shape
+
+#	find (n/2)th particle and half-mass radius
+
+#	save results to file
+
+#	make plots
+
 	pass
 
 
