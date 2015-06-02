@@ -15,8 +15,8 @@ def main():
 	ellipsoids.py
 	
 	This program reads in halo and particle data from bgc2 files and halo shape
-	data from the Rockstar's output.  Halo shape information generated from
-	Rockstar is used to fit halos with appropriately-rotated ellipsoidal
+	data from the Rockstar's ASCII output.  Halo shape information generated
+	from Rockstar is used to fit halos with appropriately-rotated ellipsoidal
 	shells, and the half-mass radius is found from the ellipsoidal radius of
 	the (n/2)th particle.
 
@@ -53,12 +53,12 @@ def main():
 
 			#  check for id match and duplicate halos
 			if len(ascii_halo) != 1:
-				print "Error:  found %d matches for halo ID %d." % (len(ascii_halo), ascii_halo.id[0])
+				print "Error:  found %d ASCII halo matches for halo ID %d." % (len(ascii_halo), ascii_halo.id[0])
 				continue
 
 			#  skip halos with fewer than specified number of particles
 			if (npart_threshold > 0) and (halos.npart < npart_threshold):
-				print "Skipping halos with fewer than %d particles." % npart_threshold
+				print "Skipping remaining halos with fewer than %d particles." % npart_threshold
 				break
 
 			#  convert Mpc to kpc for halo and particle positions
@@ -68,6 +68,12 @@ def main():
 			#  make particle positions relative to halo center
 			for particle_pos, halo_pos in zip([halo_particles.x, halo_particles.y, halo_particles.z], [halo.x, halo.y, halo.z]):
 				particle_pos[...] = particle_pos - halo_pos
+
+			#  find half-mass radius
+			if method == 'sphere':
+				half_mass_r = find_sphere_half_mass_r(halo_particles)
+			if method == 'ellipsoid':
+				half_mass_r = find_ellipsoid_half_mass_r(ascii_halo, halo_particles)
 
 
 
@@ -120,6 +126,26 @@ def read_files(files, header_line=None, comment_char='#', rec_array=False):
 		return data
 	else:
 		return header, data
+
+
+
+def find_sphere_half_mass_r(particles):
+	#  convert cartesian coordinates to radii
+	r = np.sqrt((particles.x)**2 + (particles.y)**2 + (particles.z)**2)
+
+	#  find (n/2)th particle(s) and coresponding half-mass radius
+	sort_indices = np.argsort(r)
+	if len(r) % 2 != 0:
+		#  if odd number of particles, simply find the radius of the middle particle
+		half_index = sort_indices[len(sort_indices) / 2]
+		r_half_mass = r[half_index]
+	elif len(r) % 2 == 0:
+		#  if even number of particles, find two middle particles and radius halfway between them
+		half_index1 = sort_indices[len(sort_indices) / 2 - 1]
+		half_index2 = sort_indices[len(sort_indices) / 2]
+		r_half_mass = (r[half_index1] + r[half_index2]) / 2.
+
+	return r_half_mass
 
 
 
@@ -199,6 +225,8 @@ if plot_dest_type == 'paper':
 max_iteration					# maximum number of halos to work on
 npart_threshold = 100			# minimum number of particles per halo
 dist_scale = 1.e3				# convert Mpc to kpc
+method = 'sphere'				# use spherical shells for finding half-mass radius
+#method = 'ellipsoid'			# use ellipsoidal shells for finding half-mass radius
 
 
 
