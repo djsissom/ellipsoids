@@ -71,15 +71,10 @@ def main():
 
 			#  find half-mass radius
 			if method == 'sphere':
-				half_mass_r = find_sphere_half_mass_r(halo_particles)
+				r_half_mass = get_sphere_half_mass_r(halo_particles)
 			if method == 'ellipsoid':
-				half_mass_r = find_ellipsoid_half_mass_r(ascii_halo, halo_particles)
+				r_half_mass = get_ellipsoid_half_mass_r(ascii_halo, halo_particles)
 
-
-
-		#  rotate general ellipsoid to fit halo shape
-
-		#  find (n/2)th particle and half-mass radius
 
 	#  save results to file
 
@@ -129,9 +124,43 @@ def read_files(files, header_line=None, comment_char='#', rec_array=False):
 
 
 
-def find_sphere_half_mass_r(particles):
+def get_sphere_half_mass_r(particles):
 	#  convert cartesian coordinates to radii
 	r = np.sqrt((particles.x)**2 + (particles.y)**2 + (particles.z)**2)
+
+	#  find (n/2)th particle(s) and coresponding half-mass radius
+	sort_indices = np.argsort(r)
+	if len(r) % 2 != 0:
+		#  if odd number of particles, simply find the radius of the middle particle
+		half_index = sort_indices[len(sort_indices) / 2]
+		r_half_mass = r[half_index]
+	elif len(r) % 2 == 0:
+		#  if even number of particles, find two middle particles and radius halfway between them
+		half_index1 = sort_indices[len(sort_indices) / 2 - 1]
+		half_index2 = sort_indices[len(sort_indices) / 2]
+		r_half_mass = (r[half_index1] + r[half_index2]) / 2.
+
+	return r_half_mass
+
+
+
+def get_ellipsoid_half_mass_r(ascii_halo, particles):
+	#  get rotation angles from A vector
+	theta_z = atan(ascii_halo.Ay, ascii_halo.Ax)
+	theta_x = atan(ascii_halo.Az, ascii_halo.Ay)
+
+	#  form a diagonal matrix of the inverse-squared axis ratios
+	ratios = np.diag([1.0, 1.0 / (ascii_halo.b_to_a)**2, 1.0 / (ascii_halo.c_to_a)**2])
+
+	#  rotate axis ratio matrix about z-axis  -->  X_rot = R^T * X * R
+	ratios = z_rotation_matrix(theta_z).T.dot(ratios).dot(z_rotation_matrix(theta_z)
+
+	#  rotate axis ratio matrix about x-axis  -->  X_rot = R^T * X * R
+	ratios = x_rotation_matrix(theta_x).T.dot(ratios).dot(x_rotation_matrix(theta_x)
+
+	#  convert particle cartesian coordinates to "ellipsoidal" radii
+	pos = particles[['x', 'y', 'z']]
+	r_ell = pos.T.dot(ratios).dot(pos)			# <-- probably need to use np.tensordot() here
 
 	#  find (n/2)th particle(s) and coresponding half-mass radius
 	sort_indices = np.argsort(r)
