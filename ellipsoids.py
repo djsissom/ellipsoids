@@ -66,19 +66,24 @@ def main():
 				break
 
 			#  convert Mpc to kpc for halo and particle positions
+			print "Converting units to kpc..."
 			for pos in halo.x, halo.y, halo.z, halo_particles.x, halo_particles.y, halo_particles.z:
 				pos[...] = pos * dist_scale
 
 			#  make particle positions relative to halo center
+			print "Making particle positions relative to halo center..."
 			for particle_pos, halo_pos in zip([halo_particles.x, halo_particles.y, halo_particles.z], [halo.x, halo.y, halo.z]):
 				particle_pos[...] = particle_pos - halo_pos
 
 			#  convert particle cartesian coordinates to (spherical or ellipsoidal) radii
+			print "Converting particle positions to spherical radii..."
 			r_sphere = np.sqrt((halo_particles.x)**2 + (halo_particles.y)**2 + (halo_particles.z)**2)
 			if method == 'sphere':
 				r = r_sphere
 			elif method == 'ellipsoid':
+				print "Rotating eigenvalue matrix of axis ratios..."
 				ratios = get_rotated_ratios_matrix(ascii_halo)
+				print "Converting particle positions to ellipsoidal radii..."
 				r = get_ellipsoid_r(ratios, np.column_stack((halo_particles.x, halo_particles.y, halo_particles.z)))
 
 			#  find half-mass radius
@@ -139,9 +144,9 @@ def read_files(files, header_line=None, comment_char='#', rec_array=False):
 
 
 def get_rotated_ratios_matrix(ascii_halo):
-	#  get rotation angles from A vector
-	theta_z = atan(ascii_halo.Ay, ascii_halo.Ax)
-	theta_x = atan(ascii_halo.Az, ascii_halo.Ay)
+	#  get rotation angles from A vector (and make them numbers instead of np arrays)
+	theta_z = atan(ascii_halo.Ay, ascii_halo.Ax)[0]
+	theta_x = atan(ascii_halo.Az, ascii_halo.Ay)[0]
 
 	#  form a diagonal matrix of the inverse-squared axis ratios
 	ratios = np.diag([1.0, 1.0 / (ascii_halo.b_to_a)**2, 1.0 / (ascii_halo.c_to_a)**2])
@@ -158,9 +163,18 @@ def get_rotated_ratios_matrix(ascii_halo):
 
 def get_ellipsoid_r(ratios, pos):
 	#  convert particle cartesian coordinates to "ellipsoidal" radii
-	#r_ell = pos.T.dot(ratios).dot(pos)			#  <--  todo:  probably need to use np.tensordot() here
-	tempdot = np.array([ratios.dot(coord.T) for coord in pos])				#  <--  todo:  this is going to be painfully slow; fix it!!!
-	r_ell = np.array([pos[i].dot(tempdot[i].T) for i in range(len(pos))])	#  <--  todo:  this is going to be painfully slow; fix it!!!
+	#  using einstein notation here (sorry), since it's much faster and np.dot/np.tensordot do not behave as expected
+	#  we want the element-wise dot product  ->  `pos.dot(ratios).dot(pos.T)`, but for each particle individually
+	#  `temp = ratios.dot(pos.T)` works as expected, but `pos.dot(temp)` yields a (N, N) array, but we want (N, )
+	#  np.einsum follows einstein notation of summation over repeated indices
+
+	#  temporarily store results for `ratios <dot> pos`
+	#  should be equivalent to `ratios.dot(pos.T)`
+	tempdot = np.einsum('ij, jk -> ik', ratios, pos.T, order='C')
+
+	#  now find `pos <dot> tempdot` for each row in pos
+	#  should be equivalent to `pos[:,0]*tempdot[0,:] + pos[:,1]*tempdot[1,:] + pos[:,2]*tempdot[2,:]`
+	r_ell = np.einsum('ij, ji -> i', pos, tempdot, order='C')
 
 	#  get rid of the extra array dimension to make 1-D
 	r_ell = np.squeeze(r_ell)
@@ -244,10 +258,11 @@ def make_plots(halo, ascii_halo, halo_particles, ratios, r, r_half_mass):
 def make_ellipse_ring_plot(particles, r, r_half_mass):
 	print len(particles)
 	mask = (np.abs(r - r_half_mass) / r_half_mass <= 0.05)
+	#mask = (r <= r_half_mass)
 	particles = particles[mask]
 	print len(particles)
 
-	mask = (np.abs(particles.z) <= r_half_mass * 0.05)
+	mask = (np.abs(particles.z) <= r_half_mass * 0.1)
 	particles = particles[mask]
 	print len(particles)
 
