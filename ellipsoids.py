@@ -27,18 +27,22 @@ def main():
 	Requires bgc2.py as a dependency.
 	'''
 
-	opts, args = get_args(sys.argv[1:])
-	output_file, bgc2_files, ascii_files = parse_args(opts, args)
+	#opts, args = get_args(sys.argv[1:])
+	#output_file, bgc2_files, ascii_files = parse_args(opts, args)
+	ascii_files = [sys.argv[1]]
+	bgc2_files = [sys.argv[2]]
 
 	for (ascii_file, bgc2_file) in zip(ascii_files, bgc2_files):
 		#  read in halo ID, shape data, etc. from Rockstar output
-		ascii_header, ascii_data = read_files(ascii_file, header_line=0)
+		ascii_header, ascii_data = read_files(ascii_file, header_line=0, rec_array=True)
 		#  read in bgc2 files and make arrays of halo and particle data
 		bgc2_header, halos, particles = bgc2.read_bgc2_numpy(bgc2_file)
 
 		#  find array to sort halos by number of particles to work from the biggest down
-		halo_indicies = np.argsort(halos.npart)
+		halo_indices = np.argsort(halos.npart)
 		halo_indices = halo_indices[::-1]
+		if start_halo > 0:
+			halo_indices = halo_indices[start_halo:]
 
 		#  loop through halos to work on one halo and particle list at a time
 		for iteration, halo_index in enumerate(halo_indices):
@@ -47,7 +51,7 @@ def main():
 				break
 
 			#  get data for current halo
-			halo = halos[halo_index]
+			halo = np.array(halos[halo_index]).view(np.recarray)
 			halo_particles = particles[halo_index]
 			ascii_halo = ascii_data[ascii_data.id == halo.id]
 
@@ -57,7 +61,7 @@ def main():
 				continue
 
 			#  skip halos with fewer than specified number of particles
-			if (npart_threshold > 0) and (halos.npart < npart_threshold):
+			if (npart_threshold > 0) and (halo.npart < npart_threshold):
 				print "Skipping remaining halos with fewer than %d particles." % npart_threshold
 				break
 
@@ -69,16 +73,26 @@ def main():
 			for particle_pos, halo_pos in zip([halo_particles.x, halo_particles.y, halo_particles.z], [halo.x, halo.y, halo.z]):
 				particle_pos[...] = particle_pos - halo_pos
 
-			#  find half-mass radius
+			#  convert particle cartesian coordinates to (spherical or ellipsoidal) radii
+			r_sphere = np.sqrt((halo_particles.x)**2 + (halo_particles.y)**2 + (halo_particles.z)**2)
 			if method == 'sphere':
-				r_half_mass = get_sphere_half_mass_r(halo_particles)
-			if method == 'ellipsoid':
-				r_half_mass = get_ellipsoid_half_mass_r(ascii_halo, halo_particles)
+				r = r_sphere
+			elif method == 'ellipsoid':
+				ratios = get_rotated_ratios_matrix(ascii_halo)
+				r = get_ellipsoid_r(ratios, np.column_stack((halo_particles.x, halo_particles.y, halo_particles.z)))
 
+			#  find half-mass radius
+			r_half_mass = get_half_mass_r(r, r_sphere)
 
-	#  save results to file
+			#  save result to array for later output to file
+			#  !! todo -- add this
 
-	#  make plots
+			#  make plots
+			if generate_testing_plots or generate_paper_plots:
+				make_plots(halo, ascii_halo, halo_particles, ratios, r, r_half_mass)
+
+		#  save results to file
+		#  !! todo -- add this
 
 	print 'Finished.'
 	return
@@ -124,27 +138,7 @@ def read_files(files, header_line=None, comment_char='#', rec_array=False):
 
 
 
-def get_sphere_half_mass_r(particles):
-	#  convert cartesian coordinates to radii
-	r = np.sqrt((particles.x)**2 + (particles.y)**2 + (particles.z)**2)
-
-	#  find (n/2)th particle(s) and coresponding half-mass radius
-	sort_indices = np.argsort(r)
-	if len(r) % 2 != 0:
-		#  if odd number of particles, simply find the radius of the middle particle
-		half_index = sort_indices[len(sort_indices) / 2]
-		r_half_mass = r[half_index]
-	elif len(r) % 2 == 0:
-		#  if even number of particles, find two middle particles and radius halfway between them
-		half_index1 = sort_indices[len(sort_indices) / 2 - 1]
-		half_index2 = sort_indices[len(sort_indices) / 2]
-		r_half_mass = (r[half_index1] + r[half_index2]) / 2.
-
-	return r_half_mass
-
-
-
-def get_ellipsoid_half_mass_r(ascii_halo, particles):
+def get_rotated_ratios_matrix(ascii_halo):
 	#  get rotation angles from A vector
 	theta_z = atan(ascii_halo.Ay, ascii_halo.Ax)
 	theta_x = atan(ascii_halo.Az, ascii_halo.Ay)
@@ -153,26 +147,44 @@ def get_ellipsoid_half_mass_r(ascii_halo, particles):
 	ratios = np.diag([1.0, 1.0 / (ascii_halo.b_to_a)**2, 1.0 / (ascii_halo.c_to_a)**2])
 
 	#  rotate axis ratio matrix about z-axis  -->  X_rot = R^T * X * R
-	ratios = z_rotation_matrix(theta_z).T.dot(ratios).dot(z_rotation_matrix(theta_z)
+	ratios = z_rotation_matrix(theta_z).T.dot(ratios).dot(z_rotation_matrix(theta_z))
 
 	#  rotate axis ratio matrix about x-axis  -->  X_rot = R^T * X * R
-	ratios = x_rotation_matrix(theta_x).T.dot(ratios).dot(x_rotation_matrix(theta_x)
+	ratios = x_rotation_matrix(theta_x).T.dot(ratios).dot(x_rotation_matrix(theta_x))
 
+	return ratios
+
+
+
+def get_ellipsoid_r(ratios, pos):
 	#  convert particle cartesian coordinates to "ellipsoidal" radii
-	pos = particles[['x', 'y', 'z']]
-	r_ell = pos.T.dot(ratios).dot(pos)			# <-- probably need to use np.tensordot() here
+	#r_ell = pos.T.dot(ratios).dot(pos)			#  <--  todo:  probably need to use np.tensordot() here
+	tempdot = np.array([ratios.dot(coord.T) for coord in pos])				#  <--  todo:  this is going to be painfully slow; fix it!!!
+	r_ell = np.array([pos[i].dot(tempdot[i].T) for i in range(len(pos))])	#  <--  todo:  this is going to be painfully slow; fix it!!!
 
-	#  find (n/2)th particle(s) and coresponding half-mass radius
+	#  get rid of the extra array dimension to make 1-D
+	r_ell = np.squeeze(r_ell)
+
+	return r_ell
+
+
+
+def get_half_mass_r(r, r_real=None):
+	#  set r_real to r if using spherical radii and not already done
+	if r_real == None:
+		r_real = r
+
+	#  find (n/2)th particle(s) and corresponding half-mass radius
 	sort_indices = np.argsort(r)
 	if len(r) % 2 != 0:
 		#  if odd number of particles, simply find the radius of the middle particle
 		half_index = sort_indices[len(sort_indices) / 2]
-		r_half_mass = r[half_index]
+		r_half_mass = r_real[half_index]
 	elif len(r) % 2 == 0:
 		#  if even number of particles, find two middle particles and radius halfway between them
 		half_index1 = sort_indices[len(sort_indices) / 2 - 1]
 		half_index2 = sort_indices[len(sort_indices) / 2]
-		r_half_mass = (r[half_index1] + r[half_index2]) / 2.
+		r_half_mass = (r_real[half_index1] + r_real[half_index2]) / 2.
 
 	return r_half_mass
 
@@ -219,6 +231,78 @@ def atan(x1, x2):
 
 
 
+def make_plots(halo, ascii_halo, halo_particles, ratios, r, r_half_mass):
+	if generate_testing_plots:
+		make_ellipse_ring_plot(halo_particles, r, r_half_mass)
+	if generate_paper_plots:
+		pass
+
+	return 0
+
+
+
+def make_ellipse_ring_plot(particles, r, r_half_mass):
+	print len(particles)
+	mask = (np.abs(r - r_half_mass) / r_half_mass <= 0.05)
+	particles = particles[mask]
+	print len(particles)
+
+	mask = (np.abs(particles.z) <= r_half_mass * 0.05)
+	particles = particles[mask]
+	print len(particles)
+
+	fig = plt.figure(figsize = (9.0, 6.0))
+	ax = fig.add_subplot(111, aspect='equal')
+
+	ax.plot(particles.x, particles.y, linestyle='', marker='.', markersize=2, markeredgecolor='blue')
+
+	fig.tight_layout()
+	plot_name = "%s%s%s" % (plot_base, 'ellipse_ring', plot_ext)
+	plt.savefig(plot_name, bbox_inches='tight')
+
+	return 0
+
+
+
+def draw_projection(ax, x, y, hx, hy, r, plot_lim):
+	limits = [[-plot_lim, plot_lim], [-plot_lim, plot_lim]]
+	z, xedges, yedges = np.histogram2d(x, y, bins=npixels, range=limits)
+	if log_scale_projections:
+		z[z<1.0] = 0.5
+		#z = np.log10(z)
+		#z = np.log10(z)
+		#z[np.isinf(z)] = -0.1
+		plot_norm = mpl.colors.LogNorm(vmin = 1, vmax = z.max(), clip=True)
+		#plot_norm = None
+	else:
+		plot_norm = None
+	if extra_smoothing:
+		z = gaussian_filter(z, smoothing_radius)
+	im = ax.imshow(z.T, extent=(-plot_lim, plot_lim, -plot_lim, plot_lim), \
+			interpolation='gaussian', origin='lower', cmap=colormap, norm=plot_norm)
+			#interpolation='gaussian', origin='lower', cmap=colormap)
+	ax.locator_params(nbins=6)
+	if draw_circle:
+		ax.add_patch(Circle((hx, hy), r, fc="None", ec="black", lw=1))
+	if draw_contours:
+		x_midpoints = (xedges[:-1] + xedges[1:]) / 2.0
+		y_midpoints = (yedges[:-1] + yedges[1:]) / 2.0
+		X, Y = np.meshgrid(x_midpoints, y_midpoints)
+		ax.contour(X, Y, z.T, 2, colors='black', linewidths=4)
+		ax.contour(X, Y, z.T, 2, colors='white', linewidths=2)
+	if label_colorbar:
+		if log_scale_projections:
+			log_format = mpl.ticker.LogFormatterMathtext(10, labelOnlyBase=False)
+			ax.cax.colorbar(im, format=log_format)
+		else:
+			ax.cax.colorbar(im)
+	else:
+		bar = ax.cax.colorbar(im, ticks=[])
+		bar.ax.set_yticklabels([])
+		#plt.setp(bar.ax.get_yticklabels(), visible=False)
+
+
+
 def add_white_to_colormap(orig_map, num):
 	from matplotlib import cm
 	temp_cmap = cm.get_cmap(orig_map, num)
@@ -251,11 +335,21 @@ if plot_dest_type == 'paper':
 
 
 
-max_iteration					# maximum number of halos to work on
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#	user-settable control parameters
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+start_halo = 0					# first halo to analyze
+max_iteration = 1				# number of halos to analyze
+#max_iteration = None			# number of halos to analyze
 npart_threshold = 100			# minimum number of particles per halo
 dist_scale = 1.e3				# convert Mpc to kpc
-method = 'sphere'				# use spherical shells for finding half-mass radius
-#method = 'ellipsoid'			# use ellipsoidal shells for finding half-mass radius
+#method = 'sphere'				# use spherical shells for finding half-mass radius
+method = 'ellipsoid'			# use ellipsoidal shells for finding half-mass radius
+generate_testing_plots = True	# output plots for testing purposes
+generate_paper_plots = False	# output plots for use in a paper
+plot_base = 'plots/'			# string to prepend to plot file path
+plot_ext = '.eps'				# string to append to plot file path
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 
