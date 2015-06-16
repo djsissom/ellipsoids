@@ -6,6 +6,8 @@ import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 import bgc2
+from matplotlib.patches import Circle
+from scipy.ndimage.filters import gaussian_filter
 from ipdb import set_trace
 
 
@@ -67,13 +69,16 @@ def main():
 
 			#  convert Mpc to kpc for halo and particle positions
 			print "Converting units to kpc..."
+			halo.radius = halo.radius * dist_scale
 			for pos in halo.x, halo.y, halo.z, halo_particles.x, halo_particles.y, halo_particles.z:
 				pos[...] = pos * dist_scale
 
 			#  make particle positions relative to halo center
 			print "Making particle positions relative to halo center..."
+			print halo_particles[0].x
 			for particle_pos, halo_pos in zip([halo_particles.x, halo_particles.y, halo_particles.z], [halo.x, halo.y, halo.z]):
 				particle_pos[...] = particle_pos - halo_pos
+			print halo_particles[0].x
 
 			#  convert particle cartesian coordinates to (spherical or ellipsoidal) radii
 			print "Converting particle positions to spherical radii..."
@@ -87,14 +92,38 @@ def main():
 				r = get_ellipsoid_r(ratios, np.column_stack((halo_particles.x, halo_particles.y, halo_particles.z)))
 
 			#  find half-mass radius
-			r_half_mass = get_half_mass_r(r, r_sphere)
+			r_half_mass_sphere, r_half_mass_ell = get_half_mass_r(r, r_sphere)
+
+			#  debug
+			print ''
+			print 'b_to_a: ', ascii_halo.b_to_a[0]
+			print 'c_to_a: ', ascii_halo.c_to_a[0]
+			print ''
+			print 'r_half_mass_sphere: ', r_half_mass_sphere
+			print 'r_half_mass_ell: ', r_half_mass_ell
+			print 'r_ell.max(): ', r.max()
+			print 'r_sphere.max(): ', r_sphere.max()
+			print 'mean r_sphere: ', np.average(r_sphere)
+			print 'r_vir (ascii): ', ascii_halo.rvir[0]
+			print 'r_vir (bgc2): ', halo.radius
+			print ''
+			print 'len(particles): ', len(halo_particles)
+			print 'npart (bgc2): ', halo.npart
+			print 'npart (ascii): ', ascii_halo.num_p[0]
+			print ''
+			print 'halo id (bgc2): ', halo.id
+			print 'halo id (ascii): ', ascii_halo.id[0]
+			print ''
+			print 'r_max / r_half_mass (sphere): ', r_sphere.max() / r_half_mass_sphere
+			print 'r_max / r_half_mass (ell): ', r.max() / r_half_mass_ell
+			print ''
 
 			#  save result to array for later output to file
 			#  !! todo -- add this
 
 			#  make plots
 			if generate_testing_plots or generate_paper_plots:
-				make_plots(halo, ascii_halo, halo_particles, ratios, r, r_half_mass)
+				make_plots(halo, ascii_halo, halo_particles, ratios, r, r_half_mass_ell)
 
 		#  save results to file
 		#  !! todo -- add this
@@ -176,7 +205,8 @@ def get_ellipsoid_r(ratios, pos):
 	#  should be equivalent to `pos[:,0]*tempdot[0,:] + pos[:,1]*tempdot[1,:] + pos[:,2]*tempdot[2,:]`
 	r_ell = np.einsum('ij, ji -> i', pos, tempdot, order='C')
 
-	#  get rid of the extra array dimension to make 1-D
+	#  take square root and get rid of the extra array dimension to make 1-D
+	r_ell = np.sqrt(r_ell)
 	r_ell = np.squeeze(r_ell)
 
 	return r_ell
@@ -193,14 +223,16 @@ def get_half_mass_r(r, r_real=None):
 	if len(r) % 2 != 0:
 		#  if odd number of particles, simply find the radius of the middle particle
 		half_index = sort_indices[len(sort_indices) / 2]
-		r_half_mass = r_real[half_index]
+		r_half_mass_sphere = r_real[half_index]
+		r_half_mass_ell = r[half_index]
 	elif len(r) % 2 == 0:
 		#  if even number of particles, find two middle particles and radius halfway between them
 		half_index1 = sort_indices[len(sort_indices) / 2 - 1]
 		half_index2 = sort_indices[len(sort_indices) / 2]
-		r_half_mass = (r_real[half_index1] + r_real[half_index2]) / 2.
+		r_half_mass_sphere = (r_real[half_index1] + r_real[half_index2]) / 2.
+		r_half_mass_ell = (r[half_index1] + r[half_index2]) / 2.
 
-	return r_half_mass
+	return r_half_mass_sphere, r_half_mass_ell
 
 
 
@@ -245,9 +277,10 @@ def atan(x1, x2):
 
 
 
-def make_plots(halo, ascii_halo, halo_particles, ratios, r, r_half_mass):
+def make_plots(halo, ascii_halo, particles, ratios, r, r_half_mass):
 	if generate_testing_plots:
-		make_ellipse_ring_plot(halo_particles, r, r_half_mass)
+		ellipse_ring_fig = make_ellipse_ring_plot(particles, r, r_half_mass)
+		projectinos_fig  = make_projections_plot(particles, r_half_mass, halo.radius)
 	if generate_paper_plots:
 		pass
 
@@ -256,48 +289,70 @@ def make_plots(halo, ascii_halo, halo_particles, ratios, r, r_half_mass):
 
 
 def make_ellipse_ring_plot(particles, r, r_half_mass):
+	fig = plt.figure(figsize = (9.0, 6.0))
+	ax = fig.add_subplot(111, aspect='equal')
+
+	ax = draw_ellipse_ring(ax, particles, r, r_half_mass)
+
+	fig.tight_layout()
+	plot_name = "%s%s%s" % (plot_base, 'ellipse_ring', plot_ext)
+	plt.savefig(plot_name, bbox_inches='tight')
+
+	return fig
+
+
+
+def draw_ellipse_ring(ax, particles, r, r_half_mass):
 	print len(particles)
+	mask = (np.abs(particles.z) <= particles.z.max() * 0.05)
+	particles = particles[mask]
+	r = r[mask]
+	print len(particles)
+
 	mask = (np.abs(r - r_half_mass) / r_half_mass <= 0.05)
 	#mask = (r <= r_half_mass)
 	particles = particles[mask]
 	print len(particles)
 
-	mask = (np.abs(particles.z) <= r_half_mass * 0.1)
-	particles = particles[mask]
-	print len(particles)
+	ax.plot(particles.x, particles.y, linestyle='', marker='.', markersize=2, markeredgecolor='blue')
+	ax.add_patch(Circle((0., 0.), r_half_mass, fc="None", ec="black", lw=1))
 
+	return ax
+
+
+
+
+def make_projections_plot(particles, r_half_mass, r_vir):
 	fig = plt.figure(figsize = (9.0, 6.0))
 	ax = fig.add_subplot(111, aspect='equal')
 
-	ax.plot(particles.x, particles.y, linestyle='', marker='.', markersize=2, markeredgecolor='blue')
+	plot_lim = np.max((particles.x.max(), particles.y.max()))
+	ax = draw_projection(ax, particles.x, particles.y, plot_lim + plot_lim*0.1)
+	ax.add_patch(Circle((0., 0.), r_half_mass, fc="None", ec="black", lw=1))
+	ax.add_patch(Circle((0., 0.), r_vir, fc="None", ec="black", lw=1))
 
 	fig.tight_layout()
-	plot_name = "%s%s%s" % (plot_base, 'ellipse_ring', plot_ext)
+	plot_name = "%s%s%s" % (plot_base, 'projections', plot_ext)
 	plt.savefig(plot_name, bbox_inches='tight')
 
 	return 0
 
 
 
-def draw_projection(ax, x, y, hx, hy, r, plot_lim):
+def draw_projection(ax, x, y, plot_lim, hx = None, hy = None, r = None):
 	limits = [[-plot_lim, plot_lim], [-plot_lim, plot_lim]]
 	z, xedges, yedges = np.histogram2d(x, y, bins=npixels, range=limits)
 	if log_scale_projections:
 		z[z<1.0] = 0.5
-		#z = np.log10(z)
-		#z = np.log10(z)
-		#z[np.isinf(z)] = -0.1
 		plot_norm = mpl.colors.LogNorm(vmin = 1, vmax = z.max(), clip=True)
-		#plot_norm = None
 	else:
 		plot_norm = None
 	if extra_smoothing:
 		z = gaussian_filter(z, smoothing_radius)
 	im = ax.imshow(z.T, extent=(-plot_lim, plot_lim, -plot_lim, plot_lim), \
 			interpolation='gaussian', origin='lower', cmap=colormap, norm=plot_norm)
-			#interpolation='gaussian', origin='lower', cmap=colormap)
 	ax.locator_params(nbins=6)
-	if draw_circle:
+	if draw_circle and hx != None and hy != None and r != None:
 		ax.add_patch(Circle((hx, hy), r, fc="None", ec="black", lw=1))
 	if draw_contours:
 		x_midpoints = (xedges[:-1] + xedges[1:]) / 2.0
@@ -311,10 +366,12 @@ def draw_projection(ax, x, y, hx, hy, r, plot_lim):
 			ax.cax.colorbar(im, format=log_format)
 		else:
 			ax.cax.colorbar(im)
-	else:
+	elif 0:
 		bar = ax.cax.colorbar(im, ticks=[])
 		bar.ax.set_yticklabels([])
 		#plt.setp(bar.ax.get_yticklabels(), visible=False)
+
+	return ax
 
 
 
@@ -364,6 +421,13 @@ generate_testing_plots = True	# output plots for testing purposes
 generate_paper_plots = False	# output plots for use in a paper
 plot_base = 'plots/'			# string to prepend to plot file path
 plot_ext = '.eps'				# string to append to plot file path
+npixels = 250
+smoothing_radius = 0.9
+label_colorbar = False
+draw_circle = True
+draw_contours = False
+log_scale_projections = True
+extra_smoothing = True
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
