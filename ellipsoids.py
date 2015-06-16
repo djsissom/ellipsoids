@@ -94,30 +94,6 @@ def main():
 			#  find half-mass radius
 			r_half_mass_sphere, r_half_mass_ell = get_half_mass_r(r, r_sphere)
 
-			#  debug
-			print ''
-			print 'b_to_a: ', ascii_halo.b_to_a[0]
-			print 'c_to_a: ', ascii_halo.c_to_a[0]
-			print ''
-			print 'r_half_mass_sphere: ', r_half_mass_sphere
-			print 'r_half_mass_ell: ', r_half_mass_ell
-			print 'r_ell.max(): ', r.max()
-			print 'r_sphere.max(): ', r_sphere.max()
-			print 'mean r_sphere: ', np.average(r_sphere)
-			print 'r_vir (ascii): ', ascii_halo.rvir[0]
-			print 'r_vir (bgc2): ', halo.radius
-			print ''
-			print 'len(particles): ', len(halo_particles)
-			print 'npart (bgc2): ', halo.npart
-			print 'npart (ascii): ', ascii_halo.num_p[0]
-			print ''
-			print 'halo id (bgc2): ', halo.id
-			print 'halo id (ascii): ', ascii_halo.id[0]
-			print ''
-			print 'r_max / r_half_mass (sphere): ', r_sphere.max() / r_half_mass_sphere
-			print 'r_max / r_half_mass (ell): ', r.max() / r_half_mass_ell
-			print ''
-
 			#  save result to array for later output to file
 			#  !! todo -- add this
 
@@ -281,6 +257,7 @@ def make_plots(halo, ascii_halo, particles, ratios, r, r_half_mass):
 	if generate_testing_plots:
 		ellipse_ring_fig = make_ellipse_ring_plot(particles, r, r_half_mass)
 		projectinos_fig  = make_projections_plot(particles, r_half_mass, halo.radius)
+		in_out_fig       = make_in_out_plot(halo, particles, r, r_half_mass)
 	if generate_paper_plots:
 		pass
 
@@ -303,14 +280,11 @@ def make_ellipse_ring_plot(particles, r, r_half_mass):
 
 
 def draw_ellipse_ring(ax, particles, r, r_half_mass):
-	print len(particles)
-	mask = (np.abs(particles.z) <= particles.z.max() * 0.05)
+	mask = get_slice_mask(particles.z)
 	particles = particles[mask]
 	r = r[mask]
-	print len(particles)
 
 	mask = (np.abs(r - r_half_mass) / r_half_mass <= 0.05)
-	#mask = (r <= r_half_mass)
 	particles = particles[mask]
 	print len(particles)
 
@@ -318,6 +292,12 @@ def draw_ellipse_ring(ax, particles, r, r_half_mass):
 	ax.add_patch(Circle((0., 0.), r_half_mass, fc="None", ec="black", lw=1))
 
 	return ax
+
+
+
+def get_slice_mask(z):
+	mask = (np.abs(z) <= z.max() * slice_fraction)
+	return mask
 
 
 
@@ -335,7 +315,7 @@ def make_projections_plot(particles, r_half_mass, r_vir):
 	plot_name = "%s%s%s" % (plot_base, 'projections', plot_ext)
 	plt.savefig(plot_name, bbox_inches='tight')
 
-	return 0
+	return fig
 
 
 
@@ -373,6 +353,46 @@ def draw_projection(ax, x, y, plot_lim, hx = None, hy = None, r = None):
 
 	return ax
 
+
+
+def make_in_out_plot(halo, particles, r, r_half_mass):
+	fig = plt.figure(figsize = (9.0, 6.0))
+	ax = fig.add_subplot(111, aspect='equal')
+
+	plot_lim = halo.radius
+	plot_lim = plot_lim + plot_lim * 0.1
+
+	mask = get_slice_mask(particles.z)
+	particles = particles[mask]
+	r = r[mask]
+
+	ax = draw_in_out_particles(ax, particles.x, particles.y, r, r_half_mass, plot_lim)
+	ax.add_patch(Circle((0., 0.), halo.radius, fc="None", ec="black", lw=1))
+
+	fig.tight_layout()
+	plot_name = "%s%s%s" % (plot_base, 'in_out', plot_ext)
+	plt.savefig(plot_name, bbox_inches='tight')
+
+	return fig
+
+
+
+def draw_in_out_particles(ax, x, y, r, r_half_mass, plot_lim):
+	mask = (r < r_half_mass)
+	x_in = x[mask]
+	y_in = y[mask]
+
+	mask = (r > r_half_mass)
+	x_out = x[mask]
+	y_out = y[mask]
+
+	ax.plot(x_in, y_in, linestyle='', marker='.', markersize=2, markeredgecolor='blue')
+	ax.plot(x_out, y_out, linestyle='', marker='.', markersize=2, markeredgecolor='red')
+
+	ax.set_xlim([-plot_lim, plot_lim])
+	ax.set_ylim([-plot_lim, plot_lim])
+
+	return ax
 
 
 def add_white_to_colormap(orig_map, num):
@@ -428,6 +448,7 @@ draw_circle = True
 draw_contours = False
 log_scale_projections = True
 extra_smoothing = True
+slice_fraction = 0.1
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
