@@ -159,10 +159,10 @@ def get_rotated_ratios_matrix(ascii_halo):
 	ratios = np.diag([1.0, 1.0 / (ascii_halo.b_to_a)**2, 1.0 / (ascii_halo.c_to_a)**2])
 
 	#  rotate axis ratio matrix about z-axis  -->  X_rot = R^T * X * R
-	ratios = z_rotation_matrix(theta_z).T.dot(ratios).dot(z_rotation_matrix(theta_z))
+	ratios = z_rotation_matrix(theta_z).dot(ratios).dot(z_rotation_matrix(theta_z).T)
 
 	#  rotate axis ratio matrix about x-axis  -->  X_rot = R^T * X * R
-	ratios = x_rotation_matrix(theta_x).T.dot(ratios).dot(x_rotation_matrix(theta_x))
+	ratios = x_rotation_matrix(theta_x).dot(ratios).dot(x_rotation_matrix(theta_x).T)
 
 	return ratios
 
@@ -261,7 +261,7 @@ def make_plots(halo, ascii_halo, particles, ratios, r, r_half_mass):
 		#projectinos_fig  = make_projections_plot(particles, r_half_mass, halo.radius)
 		in_out_fig       = make_in_out_plot(halo, particles, r, r_half_mass)
 	if generate_paper_plots:
-		proj_in_out_grid = make_proj_in_out_grid_plot(halo, particles, r, r_half_mass)
+		proj_in_out_grid = make_proj_in_out_grid_plot(halo, ascii_halo, particles, r, r_half_mass)
 
 	return 0
 
@@ -399,7 +399,7 @@ def draw_in_out_particles(ax, x, y, r, r_half_mass, plot_lim):
 
 
 
-def make_proj_in_out_grid_plot(halo, particles, r, r_half_mass):
+def make_proj_in_out_grid_plot(halo, ascii_halo, particles, r, r_half_mass):
 	fig = plt.figure(figsize = (9.0, 6.0))
 
 	plot_lim = halo.radius
@@ -412,7 +412,7 @@ def make_proj_in_out_grid_plot(halo, particles, r, r_half_mass):
 		ax.set_xlabel(proj_xlabel)
 		ax.set_ylabel(proj_ylabel)
 
-	fig = make_projections(fig, 211, particles, halo.radius, plot_lim)
+	fig = make_projections(fig, 211, ascii_halo, particles, halo.radius, plot_lim)
 	fig = make_in_out_panels(fig, 212, particles, r, r_half_mass, halo.radius, plot_lim)
 
 	fig.tight_layout()
@@ -423,15 +423,19 @@ def make_proj_in_out_grid_plot(halo, particles, r, r_half_mass):
 
 
 
-def make_projections(fig, position, particles, r_vir, plot_lim):
+def make_projections(fig, position, ascii_halo, particles, r_vir, plot_lim):
 	grid = ImageGrid(fig, position, nrows_ncols=(1,3), axes_pad=0.12, cbar_mode='single')
-	for i, (x, y) in enumerate(zip( \
+	for i, (x, y, Ax, Ay, Az) in enumerate(zip( \
 	        (particles.x, particles.x, particles.y), \
-	        (particles.y, particles.z, particles.z))):
+	        (particles.y, particles.z, particles.z), \
+	        (ascii_halo.Ax, ascii_halo.Ax, ascii_halo.Ay), \
+	        (ascii_halo.Ay, ascii_halo.Az, ascii_halo.Az), \
+	        (ascii_halo.Az, ascii_halo.Ay, ascii_halo.Ax))):
 		ax = grid[i]
 
 		ax = draw_projection(ax, x, y, plot_lim)
 		ax.add_patch(Circle((0., 0.), r_vir, fc="None", ec="black", lw=1))
+		ax = draw_ellipsoid_vector(ax, Ax, Ay, Az, r_vir)
 
 		if print_text:
 			if i == 0:
@@ -472,6 +476,15 @@ def make_in_out_panels(fig, position, particles, r, r_half_mass, r_vir, plot_lim
 			if i == 2:
 				ax.text(0.95, 0.88, 'YZ', color='black', horizontalalignment='right', verticalalignment='center', transform=ax.transAxes, path_effects=[patheffects.withStroke(linewidth=2, foreground='white')])
 	return fig
+
+
+
+def draw_ellipsoid_vector(ax, Ax, Ay, Az, r_vir):
+	scale = r_vir / np.sqrt(Ax**2 + Ay**2 + Az**2)
+	Ax = Ax * scale
+	Ay = Ay * scale
+	ax.arrow(0., 0., Ax[0], Ay[0], length_includes_head=True, linewidth=1, width=4, facecolor='0.75', edgecolor='black')
+	return ax
 
 
 
