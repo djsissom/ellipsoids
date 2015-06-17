@@ -77,10 +77,8 @@ def main():
 
 			#  make particle positions relative to halo center
 			print "Making particle positions relative to halo center..."
-			print halo_particles[0].x
 			for particle_pos, halo_pos in zip([halo_particles.x, halo_particles.y, halo_particles.z], [halo.x, halo.y, halo.z]):
 				particle_pos[...] = particle_pos - halo_pos
-			print halo_particles[0].x
 
 			#  convert particle cartesian coordinates to (spherical or ellipsoidal) radii
 			print "Converting particle positions to spherical radii..."
@@ -100,8 +98,9 @@ def main():
 			#  !! todo -- add this
 
 			#  make plots
-			if generate_testing_plots or generate_paper_plots:
-				make_plots(halo, ascii_halo, halo_particles, ratios, r, r_half_mass_ell)
+			if (iteration < num_halos_to_plot) and (generate_testing_plots or generate_paper_plots):
+				print "Making plot set %d for halo ID %d..." % (iteration, halo.id)
+				make_plots(iteration, halo, ascii_halo, halo_particles, ratios, r, r_half_mass_ell)
 
 		#  save results to file
 		#  !! todo -- add this
@@ -255,26 +254,27 @@ def atan(x1, x2):
 
 
 
-def make_plots(halo, ascii_halo, particles, ratios, r, r_half_mass):
+def make_plots(iteration, halo, ascii_halo, particles, ratios, r, r_half_mass):
+	id_string = "%.2d--id%d" % (iteration, halo.id)
 	if generate_testing_plots:
-		ellipse_ring_fig = make_ellipse_ring_plot(particles, r, r_half_mass)
-		#projectinos_fig  = make_projections_plot(particles, r_half_mass, halo.radius)
-		in_out_fig       = make_in_out_plot(halo, particles, r, r_half_mass)
+		ellipse_ring_fig = make_ellipse_ring_plot(id_string, particles, r, r_half_mass)
+		#projectinos_fig  = make_projections_plot(id_string, particles, r_half_mass, halo.radius)
+		in_out_fig       = make_in_out_plot(id_string, halo, particles, r, r_half_mass)
 	if generate_paper_plots:
-		proj_in_out_grid = make_proj_in_out_grid_plot(halo, ascii_halo, particles, r, r_half_mass)
+		proj_in_out_grid = make_proj_in_out_grid_plot(id_string, halo, ascii_halo, particles, r, r_half_mass)
 
 	return 0
 
 
 
-def make_ellipse_ring_plot(particles, r, r_half_mass):
+def make_ellipse_ring_plot(id_string, particles, r, r_half_mass):
 	fig = plt.figure(figsize = (9.0, 6.0))
 	ax = fig.add_subplot(111, aspect='equal')
 
 	ax = draw_ellipse_ring(ax, particles, r, r_half_mass)
 
 	fig.tight_layout()
-	plot_name = "%s%s%s" % (plot_base, 'ellipse_ring', plot_ext)
+	plot_name = "%s%s%s%s" % (plot_base, 'ellipse_ring-', id_string, plot_ext)
 	plt.savefig(plot_name, bbox_inches='tight')
 
 	return fig
@@ -288,7 +288,6 @@ def draw_ellipse_ring(ax, particles, r, r_half_mass):
 
 	mask = (np.abs(r - r_half_mass) / r_half_mass <= 0.05)
 	particles = particles[mask]
-	print len(particles)
 
 	ax.plot(particles.x, particles.y, linestyle='', marker='.', markersize=2, markeredgecolor='blue')
 	ax.add_patch(Circle((0., 0.), r_half_mass, fc="None", ec="black", lw=1))
@@ -304,7 +303,7 @@ def get_slice_mask(z):
 
 
 
-def make_projections_plot(particles, r_half_mass, r_vir):
+def make_projections_plot(id_string, particles, r_half_mass, r_vir):
 	fig = plt.figure(figsize = (9.0, 6.0))
 	ax = fig.add_subplot(111, aspect='equal')
 
@@ -315,7 +314,7 @@ def make_projections_plot(particles, r_half_mass, r_vir):
 	ax.add_patch(Circle((0., 0.), r_vir, fc="None", ec="black", lw=1))
 
 	fig.tight_layout()
-	plot_name = "%s%s%s" % (plot_base, 'projections', plot_ext)
+	plot_name = "%s%s%s%s" % (plot_base, 'projections-', id_string, plot_ext)
 	plt.savefig(plot_name, bbox_inches='tight')
 
 	return fig
@@ -358,7 +357,7 @@ def draw_projection(ax, x, y, plot_lim, hx = None, hy = None, r = None):
 
 
 
-def make_in_out_plot(halo, particles, r, r_half_mass):
+def make_in_out_plot(id_string, halo, particles, r, r_half_mass):
 	fig = plt.figure(figsize = (9.0, 6.0))
 	ax = fig.add_subplot(111, aspect='equal')
 
@@ -373,7 +372,7 @@ def make_in_out_plot(halo, particles, r, r_half_mass):
 	ax.add_patch(Circle((0., 0.), halo.radius, fc="None", ec="black", lw=1))
 
 	fig.tight_layout()
-	plot_name = "%s%s%s" % (plot_base, 'in_out', plot_ext)
+	plot_name = "%s%s%s%s" % (plot_base, 'in_out-', id_string, plot_ext)
 	plt.savefig(plot_name, bbox_inches='tight')
 
 	return fig
@@ -389,8 +388,8 @@ def draw_in_out_particles(ax, x, y, r, r_half_mass, plot_lim):
 	x_out = x[mask]
 	y_out = y[mask]
 
-	ax.plot(x_in, y_in, linestyle='', marker='.', markersize=2, markeredgecolor='blue')
-	ax.plot(x_out, y_out, linestyle='', marker='.', markersize=2, markeredgecolor='red')
+	ax.plot(x_in, y_in, linestyle='', marker='.', markersize=1, markeredgecolor='blue')
+	ax.plot(x_out, y_out, linestyle='', marker='.', markersize=1, markeredgecolor='red')
 
 	ax.set_xlim([-plot_lim, plot_lim])
 	ax.set_ylim([-plot_lim, plot_lim])
@@ -399,7 +398,7 @@ def draw_in_out_particles(ax, x, y, r, r_half_mass, plot_lim):
 
 
 
-def make_proj_in_out_grid_plot(halo, ascii_halo, particles, r, r_half_mass):
+def make_proj_in_out_grid_plot(id_string, halo, ascii_halo, particles, r, r_half_mass):
 	fig = plt.figure(figsize = (9.0, 6.0))
 
 	plot_lim = halo.radius
@@ -416,7 +415,7 @@ def make_proj_in_out_grid_plot(halo, ascii_halo, particles, r, r_half_mass):
 	fig = make_in_out_panels(fig, 212, particles, r, r_half_mass, halo.radius, plot_lim)
 
 	fig.tight_layout()
-	plot_name = "%s%s%s" % (plot_base, 'proj_grid', plot_ext)
+	plot_name = "%s%s%s%s" % (plot_base, 'proj_grid-', id_string, plot_ext)
 	plt.savefig(plot_name, bbox_inches='tight')
 
 	return fig
@@ -483,7 +482,7 @@ def draw_ellipsoid_vector(ax, Ax, Ay, Az, r_vir):
 	scale = r_vir / np.sqrt(Ax**2 + Ay**2 + Az**2)
 	Ax = Ax * scale
 	Ay = Ay * scale
-	ax.arrow(0., 0., Ax[0], Ay[0], length_includes_head=True, linewidth=1, width=4, facecolor='0.75', edgecolor='black')
+	ax.arrow(0., 0., Ax[0], Ay[0], length_includes_head=True, linewidth=1, width=r_vir/20., facecolor='0.75', edgecolor='black')
 	return ax
 
 
@@ -534,8 +533,9 @@ if plot_dest_type == 'paper':
 #	user-settable control parameters
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 start_halo = 0					# first halo to analyze
-max_iteration = 1				# number of halos to analyze
+max_iteration = 10				# number of halos to analyze
 #max_iteration = None			# number of halos to analyze
+num_halos_to_plot = 10			# max number of halos to make plots for
 npart_threshold = 100			# minimum number of particles per halo
 dist_scale = 1.e3				# convert Mpc to kpc
 #method = 'sphere'				# use spherical shells for finding half-mass radius
