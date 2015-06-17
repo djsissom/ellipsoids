@@ -7,6 +7,8 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 import bgc2
 from matplotlib.patches import Circle
+from matplotlib import patheffects
+from mpl_toolkits.axes_grid1 import ImageGrid
 from scipy.ndimage.filters import gaussian_filter
 from ipdb import set_trace
 
@@ -256,10 +258,10 @@ def atan(x1, x2):
 def make_plots(halo, ascii_halo, particles, ratios, r, r_half_mass):
 	if generate_testing_plots:
 		ellipse_ring_fig = make_ellipse_ring_plot(particles, r, r_half_mass)
-		projectinos_fig  = make_projections_plot(particles, r_half_mass, halo.radius)
+		#projectinos_fig  = make_projections_plot(particles, r_half_mass, halo.radius)
 		in_out_fig       = make_in_out_plot(halo, particles, r, r_half_mass)
 	if generate_paper_plots:
-		pass
+		proj_in_out_grid = make_proj_in_out_grid_plot(halo, particles, r, r_half_mass)
 
 	return 0
 
@@ -307,7 +309,8 @@ def make_projections_plot(particles, r_half_mass, r_vir):
 	ax = fig.add_subplot(111, aspect='equal')
 
 	plot_lim = np.max((particles.x.max(), particles.y.max()))
-	ax = draw_projection(ax, particles.x, particles.y, plot_lim + plot_lim*0.1)
+	plot_lim = plot_lim + plot_lim * 0.1
+	ax = draw_projection(ax, particles.x, particles.y, plot_lim)
 	ax.add_patch(Circle((0., 0.), r_half_mass, fc="None", ec="black", lw=1))
 	ax.add_patch(Circle((0., 0.), r_vir, fc="None", ec="black", lw=1))
 
@@ -346,7 +349,7 @@ def draw_projection(ax, x, y, plot_lim, hx = None, hy = None, r = None):
 			ax.cax.colorbar(im, format=log_format)
 		else:
 			ax.cax.colorbar(im)
-	elif 0:
+	else:
 		bar = ax.cax.colorbar(im, ticks=[])
 		bar.ax.set_yticklabels([])
 		#plt.setp(bar.ax.get_yticklabels(), visible=False)
@@ -395,6 +398,93 @@ def draw_in_out_particles(ax, x, y, r, r_half_mass, plot_lim):
 	return ax
 
 
+
+def make_proj_in_out_grid_plot(halo, particles, r, r_half_mass):
+	fig = plt.figure(figsize = (9.0, 6.0))
+
+	plot_lim = halo.radius
+	plot_lim = plot_lim + plot_lim * 0.1
+
+	if label_projections:
+		#ax = fig.add_subplot(211, aspect=2.0/3.2)
+		ax = fig.add_subplot(111)
+		ax = hide_axes(ax)
+		ax.set_xlabel(proj_xlabel)
+		ax.set_ylabel(proj_ylabel)
+
+	fig = make_projections(fig, 211, particles, halo.radius, plot_lim)
+	fig = make_in_out_panels(fig, 212, particles, r, r_half_mass, halo.radius, plot_lim)
+
+	fig.tight_layout()
+	plot_name = "%s%s%s" % (plot_base, 'proj_grid', plot_ext)
+	plt.savefig(plot_name, bbox_inches='tight')
+
+	return fig
+
+
+
+def make_projections(fig, position, particles, r_vir, plot_lim):
+	grid = ImageGrid(fig, position, nrows_ncols=(1,3), axes_pad=0.12, cbar_mode='single')
+	for i, (x, y) in enumerate(zip( \
+	        (particles.x, particles.x, particles.y), \
+	        (particles.y, particles.z, particles.z))):
+		ax = grid[i]
+
+		ax = draw_projection(ax, x, y, plot_lim)
+		ax.add_patch(Circle((0., 0.), r_vir, fc="None", ec="black", lw=1))
+
+		if print_text:
+			if i == 0:
+				ax.text(0.95, 0.88, 'XY', color='black', horizontalalignment='right', verticalalignment='center', transform=ax.transAxes, path_effects=[patheffects.withStroke(linewidth=2, foreground='white')])
+			if i == 1:
+				ax.text(0.95, 0.88, 'XZ', color='black', horizontalalignment='right', verticalalignment='center', transform=ax.transAxes, path_effects=[patheffects.withStroke(linewidth=2, foreground='white')])
+			if i == 2:
+				ax.text(0.95, 0.88, 'YZ', color='black', horizontalalignment='right', verticalalignment='center', transform=ax.transAxes, path_effects=[patheffects.withStroke(linewidth=2, foreground='white')])
+	return fig
+
+
+
+def make_in_out_panels(fig, position, particles, r, r_half_mass, r_vir, plot_lim):
+	grid = ImageGrid(fig, position, nrows_ncols=(1,3), axes_pad=0.12, cbar_mode='single')
+	for i, (x, y, z) in enumerate(zip( \
+	        (particles.x, particles.x, particles.y), \
+	        (particles.y, particles.z, particles.z), \
+	        (particles.z, particles.y, particles.x))):
+		ax = grid[i]
+
+		mask = get_slice_mask(z)
+		x_slice = x[mask]
+		y_slice = y[mask]
+		r_slice = r[mask]
+
+		ax = draw_in_out_particles(ax, x_slice, y_slice, r_slice, r_half_mass, plot_lim)
+		ax.add_patch(Circle((0., 0.), r_vir, fc="None", ec="black", lw=1))
+
+		#bar = ax.cax.colorbar(im, ticks=[])
+		bar = mpl.colorbar.ColorbarBase(ax.cax, cmap='seismic', ticks=[])
+		bar.ax.set_yticklabels([])
+
+		if print_text:
+			if i == 0:
+				ax.text(0.95, 0.88, 'XY', color='black', horizontalalignment='right', verticalalignment='center', transform=ax.transAxes, path_effects=[patheffects.withStroke(linewidth=2, foreground='white')])
+			if i == 1:
+				ax.text(0.95, 0.88, 'XZ', color='black', horizontalalignment='right', verticalalignment='center', transform=ax.transAxes, path_effects=[patheffects.withStroke(linewidth=2, foreground='white')])
+			if i == 2:
+				ax.text(0.95, 0.88, 'YZ', color='black', horizontalalignment='right', verticalalignment='center', transform=ax.transAxes, path_effects=[patheffects.withStroke(linewidth=2, foreground='white')])
+	return fig
+
+
+
+def hide_axes(ax):
+	ax.spines['top'].set_color('none')
+	ax.spines['bottom'].set_color('none')
+	ax.spines['left'].set_color('none')
+	ax.spines['right'].set_color('none')
+	ax.tick_params(labelcolor='w', top='off', bottom='off', left='off', right='off')
+	return ax
+
+
+
 def add_white_to_colormap(orig_map, num):
 	from matplotlib import cm
 	temp_cmap = cm.get_cmap(orig_map, num)
@@ -438,9 +528,10 @@ dist_scale = 1.e3				# convert Mpc to kpc
 #method = 'sphere'				# use spherical shells for finding half-mass radius
 method = 'ellipsoid'			# use ellipsoidal shells for finding half-mass radius
 generate_testing_plots = True	# output plots for testing purposes
-generate_paper_plots = False	# output plots for use in a paper
+generate_paper_plots = True		# output plots for use in a paper
 plot_base = 'plots/'			# string to prepend to plot file path
 plot_ext = '.eps'				# string to append to plot file path
+slice_fraction = 0.05
 npixels = 250
 smoothing_radius = 0.9
 label_colorbar = False
@@ -448,7 +539,10 @@ draw_circle = True
 draw_contours = False
 log_scale_projections = True
 extra_smoothing = True
-slice_fraction = 0.1
+print_text = True
+label_projections = True
+proj_xlabel = r'Position (kpc h$^{-1}$)'
+proj_ylabel = r'Position (kpc h$^{-1}$)'
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
