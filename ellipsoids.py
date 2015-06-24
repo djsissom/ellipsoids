@@ -80,6 +80,10 @@ def main():
 			for particle_pos, halo_pos in zip([halo_particles.x, halo_particles.y, halo_particles.z], [halo.x, halo.y, halo.z]):
 				particle_pos[...] = particle_pos - halo_pos
 
+			#  optionally, generate simplified fake halo data for testing/debugging
+			if test_fake_halo:
+				ascii_halo, halo, halo_particles = make_fake_halo(ascii_halo, halo, halo_particles)
+
 			#  convert particle cartesian coordinates to (spherical or ellipsoidal) radii
 			print "Converting particle positions to spherical radii..."
 			r_sphere = np.sqrt((halo_particles.x)**2 + (halo_particles.y)**2 + (halo_particles.z)**2)
@@ -152,16 +156,23 @@ def read_files(files, header_line=None, comment_char='#', rec_array=False):
 def get_rotated_ratios_matrix(ascii_halo):
 	#  get rotation angles from A vector (and make them numbers instead of np arrays)
 	theta_z = atan(ascii_halo.Ay, ascii_halo.Ax)[0]
-	theta_x = atan(ascii_halo.Az, ascii_halo.Ay)[0]
+	theta_y = atan(ascii_halo.Az, ascii_halo.Ax)[0]
+	#theta_x = atan(ascii_halo.Az, ascii_halo.Ay)[0]
 
 	#  form a diagonal matrix of the inverse-squared axis ratios
 	ratios = np.diag([1.0, 1.0 / (ascii_halo.b_to_a)**2, 1.0 / (ascii_halo.c_to_a)**2])
 
 	#  rotate axis ratio matrix about z-axis  -->  X_rot = R^T * X * R
 	ratios = z_rotation_matrix(theta_z).dot(ratios).dot(z_rotation_matrix(theta_z).T)
+	#ratios = z_rotation_matrix(theta_z).T.dot(ratios).dot(z_rotation_matrix(theta_z))
+
+	#  rotate axis ratio matrix about y-axis  -->  X_rot = R^T * X * R
+	ratios = y_rotation_matrix(theta_y).dot(ratios).dot(y_rotation_matrix(theta_y).T)
+	#ratios = y_rotation_matrix(theta_y).T.dot(ratios).dot(y_rotation_matrix(theta_y))
 
 	#  rotate axis ratio matrix about x-axis  -->  X_rot = R^T * X * R
-	ratios = x_rotation_matrix(theta_x).dot(ratios).dot(x_rotation_matrix(theta_x).T)
+	#ratios = x_rotation_matrix(theta_x).dot(ratios).dot(x_rotation_matrix(theta_x).T)
+	#ratios = x_rotation_matrix(theta_x).T.dot(ratios).dot(x_rotation_matrix(theta_x))
 
 	return ratios
 
@@ -482,7 +493,8 @@ def draw_ellipsoid_vector(ax, Ax, Ay, Az, r_vir):
 	scale = r_vir / np.sqrt(Ax**2 + Ay**2 + Az**2)
 	Ax = Ax * scale
 	Ay = Ay * scale
-	ax.arrow(0., 0., Ax[0], Ay[0], length_includes_head=True, linewidth=1, width=r_vir/20., facecolor='0.75', edgecolor='black')
+	if Ax != 0 or Ay != 0:
+		ax.arrow(0., 0., Ax[0], Ay[0], length_includes_head=True, linewidth=1, width=r_vir/20., facecolor='0.75', edgecolor='black')
 	return ax
 
 
@@ -494,6 +506,28 @@ def hide_axes(ax):
 	ax.spines['right'].set_color('none')
 	ax.tick_params(labelcolor='w', top='off', bottom='off', left='off', right='off')
 	return ax
+
+
+
+def make_fake_halo(ascii_halo, halo, particles):
+	r_vir = 50.
+	halo.radius = r_vir
+	ascii_halo.rvir = r_vir
+	ascii_halo.b_to_a = 0.5
+	ascii_halo.c_to_a = 0.25
+	ascii_halo.Ax = r_vir
+	ascii_halo.Ay = r_vir
+	ascii_halo.Az = 0.0
+	particles.x = r_vir * (np.random.random(len(particles)) * 2. - 1.)
+	particles.y = r_vir * (np.random.random(len(particles)) * 1. - 0.5)
+	particles.z = r_vir * (np.random.random(len(particles)) * 0.5 - 0.25)
+	if True:
+		pos = np.column_stack((particles.x, particles.y, particles.z))
+		pos = z_rotation_matrix(np.pi/4.).dot(pos.T).T
+		particles.x = pos[:,0]
+		particles.y = pos[:,1]
+		particles.z = pos[:,2]
+	return ascii_halo, halo, particles
 
 
 
@@ -532,10 +566,11 @@ if plot_dest_type == 'paper':
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #	user-settable control parameters
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test_fake_halo = False			# generate an idealized fake halo for testing
 start_halo = 0					# first halo to analyze
-max_iteration = 10				# number of halos to analyze
+max_iteration = 4				# number of halos to analyze
 #max_iteration = None			# number of halos to analyze
-num_halos_to_plot = 10			# max number of halos to make plots for
+num_halos_to_plot = 4			# max number of halos to make plots for
 npart_threshold = 100			# minimum number of particles per halo
 dist_scale = 1.e3				# convert Mpc to kpc
 #method = 'sphere'				# use spherical shells for finding half-mass radius
