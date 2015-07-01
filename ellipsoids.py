@@ -516,18 +516,38 @@ def make_fake_halo(ascii_halo, halo, particles):
 	ascii_halo.b_to_a = 0.5
 	ascii_halo.c_to_a = 0.25
 	ascii_halo.Ax = r_vir
-	ascii_halo.Ay = r_vir
+	ascii_halo.Ay = 0.0
 	ascii_halo.Az = 0.0
 	particles.x = r_vir * (np.random.random(len(particles)) * 2. - 1.)
 	particles.y = r_vir * (np.random.random(len(particles)) * 1. - 0.5)
 	particles.z = r_vir * (np.random.random(len(particles)) * 0.5 - 0.25)
-	if True:
-		pos = np.column_stack((particles.x, particles.y, particles.z))
-		pos = z_rotation_matrix(np.pi/4.).dot(pos.T).T
-		particles.x = pos[:,0]
-		particles.y = pos[:,1]
-		particles.z = pos[:,2]
+
+	rotation_matrices = []
+	for rotation in rotate_fake_order:
+		if rotation == 'x':
+			rotation_matrices.append(x_rotation_matrix(rotate_fake_x_angle))
+		if rotation == 'y':
+			rotation_matrices.append(y_rotation_matrix(rotate_fake_y_angle))
+		if rotation == 'z':
+			rotation_matrices.append(z_rotation_matrix(rotate_fake_z_angle))
+
+	for rotation_matrix in rotation_matrices:
+		particles.x, particles.y, particles.z, ascii_halo.Ax, ascii_halo.Ay, ascii_halo.Az = rotate_fake_halo( \
+		             rotation_matrix, \
+		             particles.x, particles.y, particles.z, \
+		             ascii_halo.Ax, ascii_halo.Ay, ascii_halo.Az)
+
 	return ascii_halo, halo, particles
+
+
+
+def rotate_fake_halo(rotation_matrix, x, y, z, Ax, Ay, Az):
+	pos = np.column_stack((x, y, z))
+	pos = rotation_matrix.dot(pos.T).T
+	A = np.array([Ax, Ay, Az])
+	A = rotation_matrix.dot(A)
+	return pos[:,0], pos[:,1], pos[:,2], A[0], A[1], A[2]
+
 
 
 
@@ -566,11 +586,20 @@ if plot_dest_type == 'paper':
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #	user-settable control parameters
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test_fake_halo = False			# generate an idealized fake halo for testing
+test_fake_halo = True			# generate an idealized fake halo for testing
+if test_fake_halo:
+	#rotate_fake_order = ['x', 'y', 'z']
+	rotate_fake_order = ['z']
+	#rotate_fake_about_x = False
+	#rotate_fake_about_y = False
+	#rotate_fake_about_z = True
+	rotate_fake_x_angle = np.pi / 4.
+	rotate_fake_y_angle = np.pi / 4.
+	rotate_fake_z_angle = np.pi / 4.
 start_halo = 0					# first halo to analyze
-max_iteration = 4				# number of halos to analyze
+max_iteration = 1				# number of halos to analyze
 #max_iteration = None			# number of halos to analyze
-num_halos_to_plot = 4			# max number of halos to make plots for
+num_halos_to_plot = 1			# max number of halos to make plots for
 npart_threshold = 100			# minimum number of particles per halo
 dist_scale = 1.e3				# convert Mpc to kpc
 #method = 'sphere'				# use spherical shells for finding half-mass radius
