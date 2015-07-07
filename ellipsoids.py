@@ -156,7 +156,7 @@ def read_files(files, header_line=None, comment_char='#', rec_array=False):
 def get_rotated_ratios_matrix(ascii_halo):
 	#  get rotation angles from A vector (and make them numbers instead of np arrays)
 	theta_z = atan(ascii_halo.Ay, ascii_halo.Ax)[0]
-	theta_y = atan(ascii_halo.Az, ascii_halo.Ax)[0]
+	theta_y = atan(-ascii_halo.Az, ascii_halo.Ax)[0]
 	#theta_x = atan(ascii_halo.Az, ascii_halo.Ay)[0]
 
 	#  form a diagonal matrix of the inverse-squared axis ratios
@@ -589,13 +589,10 @@ if plot_dest_type == 'paper':
 test_fake_halo = True			# generate an idealized fake halo for testing
 if test_fake_halo:
 	#rotate_fake_order = ['x', 'y', 'z']
-	rotate_fake_order = ['z']
-	#rotate_fake_about_x = False
-	#rotate_fake_about_y = False
-	#rotate_fake_about_z = True
-	rotate_fake_x_angle = np.pi / 4.
-	rotate_fake_y_angle = np.pi / 4.
-	rotate_fake_z_angle = np.pi / 4.
+	rotate_fake_order = ['x', 'z']
+	rotate_fake_x_angle = np.pi / 2.
+	rotate_fake_y_angle = -np.pi / 3.
+	rotate_fake_z_angle = -np.pi / 3.
 start_halo = 0					# first halo to analyze
 max_iteration = 1				# number of halos to analyze
 #max_iteration = None			# number of halos to analyze
