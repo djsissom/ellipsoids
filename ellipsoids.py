@@ -92,6 +92,9 @@ def main():
 			elif method == 'ellipsoid':
 				print "Rotating eigenvalue matrix of axis ratios..."
 				ratios = get_rotated_ratios_matrix(ascii_halo)
+				ratios = get_best_minor_rotation(ratios, \
+				                                 np.array([ascii_halo.Ax[0], ascii_halo.Ay[0], ascii_halo.Az[0]]), \
+				                                 np.column_stack((halo_particles.x, halo_particles.y, halo_particles.z)))
 				print "Converting particle positions to ellipsoidal radii..."
 				r = get_ellipsoid_r(ratios, np.column_stack((halo_particles.x, halo_particles.y, halo_particles.z)))
 
@@ -178,6 +181,14 @@ def get_rotated_ratios_matrix(ascii_halo):
 
 
 
+def get_best_minor_rotation(ratios, A, pos):
+	theta = np.pi / 6.
+	rotation = axis_angle_rotation_matrix(A[0], A[1], A[2], theta)
+	ratios = rotation.dot(ratios).dot(rotation.T)
+	return ratios
+
+
+
 def get_ellipsoid_r(ratios, pos):
 	#  convert particle cartesian coordinates to "ellipsoidal" radii
 	#  using einstein notation here (sorry), since it's much faster and np.dot/np.tensordot do not behave as expected
@@ -242,6 +253,16 @@ def z_rotation_matrix(theta):
 	return np.array([[cos(theta), -(sin(theta)), 0.], \
 	                 [sin(theta),   cos(theta),  0.], \
 	                 [0.,           0.,          1.]])
+
+
+
+def axis_angle_rotation_matrix(x, y, z, theta):
+	if np.sqrt(x**2 + y**2 + z**2) != 1.:
+		norm = np.sqrt(x**2 + y**2 + z**2)
+		x, y, z = x / norm, y / norm, z / norm
+	return np.array([[cos(theta) + x * x * (1. - cos(theta)),     x * y * (1. - cos(theta)) - z * sin(theta), x * z * (1. - cos(theta)) + y * sin(theta)], \
+	                 [y * x * (1. - cos(theta)) + z * sin(theta), cos(theta) + y * y * (1. - cos(theta)),     y * z * (1. - cos(theta)) - x * sin(theta)], \
+	                 [z * x * (1. - cos(theta)) - y * sin(theta), z * y * (1. - cos(theta)) + x * sin(theta), cos(theta) + z * z * (1. - cos(theta))]])
 
 
 
@@ -590,7 +611,7 @@ test_fake_halo = True			# generate an idealized fake halo for testing
 if test_fake_halo:
 	#rotate_fake_order = ['x', 'y', 'z']
 	rotate_fake_order = ['x', 'z']
-	rotate_fake_x_angle = np.pi / 2.
+	rotate_fake_x_angle = np.pi / 6.
 	rotate_fake_y_angle = -np.pi / 3.
 	rotate_fake_z_angle = -np.pi / 3.
 start_halo = 0					# first halo to analyze
