@@ -640,7 +640,7 @@ if plot_dest_type == 'paper':
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #	user-settable control parameters
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test_fake_halo = True			# generate an idealized fake halo for testing
+test_fake_halo = False			# generate an idealized fake halo for testing
 if test_fake_halo:
 	#rotate_fake_order = ['x', 'y', 'z']
 	rotate_fake_order = ['x', 'z']
@@ -648,9 +648,9 @@ if test_fake_halo:
 	rotate_fake_y_angle = -np.pi / 3.
 	rotate_fake_z_angle = -np.pi / 3.
 start_halo = 0					# first halo to analyze
-max_iteration = 1				# number of halos to analyze
+max_iteration = 10				# number of halos to analyze
 #max_iteration = None			# number of halos to analyze
-num_halos_to_plot = 1			# max number of halos to make plots for
+num_halos_to_plot = 10			# max number of halos to make plots for
 npart_threshold = 100			# minimum number of particles per halo
 dist_scale = 1.e3				# convert Mpc to kpc
 #method = 'sphere'				# use spherical shells for finding half-mass radius
