@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
+import scipy.optimize as opt
 import bgc2
 from matplotlib.patches import Circle
 from matplotlib import patheffects
@@ -92,7 +93,7 @@ def main():
 			elif method == 'ellipsoid':
 				print "Rotating eigenvalue matrix of axis ratios..."
 				ratios = get_rotated_ratios_matrix(ascii_halo)
-				ratios = get_best_minor_rotation(ratios, \
+				ratios = get_best_minor_rotation(ascii_halo.rvir, ratios, \
 				                                 np.array([ascii_halo.Ax[0], ascii_halo.Ay[0], ascii_halo.Az[0]]), \
 				                                 np.column_stack((halo_particles.x, halo_particles.y, halo_particles.z)))
 				print "Converting particle positions to ellipsoidal radii..."
@@ -181,8 +182,40 @@ def get_rotated_ratios_matrix(ascii_halo):
 
 
 
-def get_best_minor_rotation(ratios, A, pos):
-	theta = np.pi / 6.
+def get_best_minor_rotation(radius, ratios, A, pos):
+	theta = get_best_theta(radius, ratios, A, pos)
+	ratios = rotate_ratios_about_axis(theta, A, ratios)
+	return ratios
+
+
+
+def get_best_theta(radius, ratios, A, pos):
+	print 'Npart = ', len(pos)
+	theta, fval, ierr, iters = opt.fminbound(count_npart_outside_radius, \
+	                                         0.0, np.pi, \
+	                                         args=([A, ratios, radius, pos]), \
+	                                         xtol=1.e-2, maxfun=100, full_output=True, disp=3)
+	if ierr == 0:
+		return theta
+	elif ierr == 1:
+		print "Error in finding best minor rotation:  maximum number of function calls reached."
+		return np.nan
+	else:
+		print "Unknown error flag received from fmim_bound().  Exiting..."
+		sys.exit()
+
+
+
+def count_npart_outside_radius(theta, A, ratios, radius, pos):
+	ratios = rotate_ratios_about_axis(theta, A, ratios)
+	r_ell = get_ellipsoid_r(ratios, pos)
+	mask = (r_ell > radius)
+	npart = mask.sum()
+	return npart
+
+
+
+def rotate_ratios_about_axis(theta, A, ratios):
 	rotation = axis_angle_rotation_matrix(A[0], A[1], A[2], theta)
 	ratios = rotation.dot(ratios).dot(rotation.T)
 	return ratios
