@@ -93,7 +93,8 @@ def main():
 			elif method == 'ellipsoid':
 				print "Rotating eigenvalue matrix of axis ratios..."
 				ratios = get_rotated_ratios_matrix(ascii_halo)
-				ratios = get_best_minor_rotation(ascii_halo.rvir, ratios, \
+				#ratios = get_best_minor_rotation(ascii_halo.rvir, ratios, \
+				ratios = get_best_minor_rotation(ascii_halo.Rs, ratios, \
 				                                 np.array([ascii_halo.Ax[0], ascii_halo.Ay[0], ascii_halo.Az[0]]), \
 				                                 np.column_stack((halo_particles.x, halo_particles.y, halo_particles.z)))
 				print "Converting particle positions to ellipsoidal radii..."
@@ -489,13 +490,19 @@ def make_proj_in_out_grid_plot(id_string, halo, ascii_halo, particles, r, r_half
 
 def make_projections(fig, position, ascii_halo, particles, r_vir, plot_lim):
 	grid = ImageGrid(fig, position, nrows_ncols=(1,3), axes_pad=0.12, cbar_mode='single')
-	for i, (x, y, Ax, Ay, Az) in enumerate(zip( \
+	for i, (x, y, z, Ax, Ay, Az) in enumerate(zip( \
 	        (particles.x, particles.x, particles.y), \
 	        (particles.y, particles.z, particles.z), \
+	        (particles.z, particles.y, particles.x), \
 	        (ascii_halo.Ax, ascii_halo.Ax, ascii_halo.Ay), \
 	        (ascii_halo.Ay, ascii_halo.Az, ascii_halo.Az), \
 	        (ascii_halo.Az, ascii_halo.Ay, ascii_halo.Ax))):
 		ax = grid[i]
+
+		if slice_projections:
+			mask = get_slice_mask(z)
+			x = x[mask]
+			y = y[mask]
 
 		ax = draw_projection(ax, x, y, plot_lim)
 		ax.add_patch(Circle((0., 0.), r_vir, fc="None", ec="black", lw=1))
@@ -662,6 +669,7 @@ plot_ext = '.eps'				# string to append to plot file path
 slice_fraction = 0.05
 npixels = 250
 smoothing_radius = 0.9
+slice_projections = True
 label_colorbar = False
 draw_circle = True
 draw_contours = False
